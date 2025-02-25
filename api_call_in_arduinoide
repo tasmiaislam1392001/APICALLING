@@ -1,0 +1,77 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <BluetoothSerial.h>
+
+// WiFi Credentials
+const char* ssid = "404";               // Replace with your Wi-Fi SSID
+const char* password = "123456788";      // Replace with your Wi-Fi Password
+
+// OpenWeatherMap API
+const char* apiKey = "87dee9288951b768602d21ed3f5414a0"; // Replace with your API Key
+String city = "SYLHET"; // Default city
+
+// Bluetooth Serial Object
+BluetoothSerial SerialBT;
+
+void setup() {
+    Serial.begin(115200);      // Debug Monitor
+    SerialBT.begin("ESP32_Weather"); // Bluetooth Device Name
+
+    Serial.print("Connecting to WiFi");
+    WiFi.begin(ssid, password);
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) { // Max 20 attempts
+        delay(1000);
+        Serial.print(".");
+        attempts++;
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nWiFi Connected!");
+        SerialBT.println("Bluetooth Ready!");
+    } else {
+        Serial.println("\nWiFi Connection Failed!");
+        SerialBT.println("WiFi Connection Failed!");
+    }
+    
+    SerialBT.println("Send a city name to change location.");
+}
+
+void getWeatherData() {
+    if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+
+        // Construct the API URL dynamically
+        String server = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "&appid=" + apiKey + "&units=metric";
+        http.begin(server);
+
+        int httpResponseCode = http.GET();
+
+        if (httpResponseCode > 0) {
+            String payload = http.getString();
+            SerialBT.println("Weather Data for " + city + ":");
+            SerialBT.println(payload);
+        } else {
+            SerialBT.println("API Request Failed, Code: " + String(httpResponseCode));
+        }
+        http.end();
+    } else {
+        SerialBT.println("WiFi Lost! Reconnecting...");
+        WiFi.begin(ssid, password);
+    }
+}
+
+// Function to receive input from Bluetooth Serial
+void receiveBluetoothInput() {
+    if (SerialBT.available()) {
+        city = SerialBT.readStringUntil('\n'); // Read city name
+        city.trim(); // Remove any unwanted spaces or newlines
+        SerialBT.println("City changed to: " + city);
+    }
+}
+
+void loop() {
+    receiveBluetoothInput(); // Check for new city input
+    getWeatherData(); // Fetch weather for the current city
+    delay(60000); // Fetch data every 60 seconds
+}
